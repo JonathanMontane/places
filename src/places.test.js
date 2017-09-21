@@ -34,7 +34,7 @@ describe('places', () => {
       expect(() => places({ container })).toThrowError(errors.multiContainers);
     });
 
-    it('fails when container is a css selector resoling to multiple elements', () => {
+    it('fails when container is a css selector resolving to multiple elements', () => {
       document
         .querySelector('body')
         .appendChild(document.createElement('span'));
