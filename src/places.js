@@ -7,21 +7,75 @@ import './navigatorLanguage.js';
 
 import createAutocompleteDataset from './createAutocompleteDataset.js';
 
-import clearIcon from './icons/clear.svg';
-import pinIcon from './icons/address.svg';
-
 import css from './places.css';
+import createSearchBar from './createDOMSearchBar.js';
+
 import insertCss from 'insert-css';
 insertCss(css, { prepend: true });
 
 import errors from './errors.js';
 
-export default function places(options) {
-  const {
-    container,
-    style,
-    autocompleteOptions: userAutocompleteOptions = {},
-  } = options;
+class PlacesProxyEventEmitter extends EventEmitter {
+  autocomplete = null;
+
+  onError = e => this.emit('error', e);
+
+  onHits = ({ hits, rawAnswer, query }) =>
+    this.emit('suggestions', {
+      rawAnswer,
+      query,
+      suggestions: hits,
+    });
+
+  onRateLimitReached = () => {
+    const listeners = this.listenerCount('limit');
+    if (listeners === 0) {
+      console.log(errors.rateLimitReached); // eslint-disable-line
+      return;
+    }
+
+    this.emit('limit', { message: errors.rateLimitReached });
+  };
+
+  onSuggestion = (_, suggestion) => {
+    this.emit('change', {
+      rawAnswer: suggestion.rawAnswer,
+      query: suggestion.query,
+      suggestion,
+      suggestionIndex: suggestion.hitIndex,
+    });
+  };
+
+  onCursorChange = (_, suggestion) => {
+    this.emit('cursorchanged', {
+      rawAnswer: suggestion.rawAnswer,
+      query: suggestion.query,
+      suggestion,
+      suggestionIndex: suggestion.hitIndex,
+    });
+  };
+
+  bindToAutocompleteInstance = autocompleteInstance => {
+    const autocompleteChangeEvents = ['selected', 'autocompleted'];
+
+    autocompleteChangeEvents.forEach(eventName => {
+      autocompleteInstance.on(`autocomplete:${eventName}`, this.onSuggestion);
+    });
+
+    autocompleteInstance.on('autocomplete:cursorchanged', this.onCursorChange);
+
+    const autocompleteMethods = ['open', 'close', 'getVal', 'setVal'];
+
+    autocompleteMethods.forEach(methodName => {
+      this[methodName] = autocompleteInstance.autocomplete[methodName];
+    });
+
+    this.autocomplete = autocompleteInstance;
+  };
+}
+
+const normalizeOptions = options => {
+  const { container } = options;
 
   // multiple DOM elements targeted
   if (container instanceof NodeList) {
@@ -30,13 +84,13 @@ export default function places(options) {
     }
 
     // if single node NodeList received, resolve to the first one
-    return places({ ...options, container: container[0] });
+    return normalizeOptions({ ...options, container: container[0] });
   }
 
   // container sent as a string, resolve it for multiple DOM elements issue
   if (typeof container === 'string') {
     const resolvedContainer = document.querySelectorAll(container);
-    return places({ ...options, container: resolvedContainer });
+    return normalizeOptions({ ...options, container: resolvedContainer });
   }
 
   // if not an <input>, error
@@ -44,130 +98,84 @@ export default function places(options) {
     throw new Error(errors.badContainer);
   }
 
-  const placesInstance = new EventEmitter();
-  const prefix = `ap${style === false ? '-nostyle' : ''}`;
+  return options;
+};
 
-  const autocompleteOptions = {
-    autoselect: true,
-    hint: false,
-    cssClasses: {
-      root: `algolia-places${style === false ? '-nostyle' : ''}`,
-      prefix,
-    },
-    debug: process.env.NODE_ENV === 'development',
-    ...userAutocompleteOptions,
-  };
+const prepareAutocompleteOptions = ({
+  style,
+  prefix,
+  userAutocompleteOptions,
+}) => ({
+  autoselect: true,
+  hint: false,
+  cssClasses: {
+    root: `algolia-places${style === false ? '-nostyle' : ''}`,
+    prefix,
+  },
+  debug: process.env.NODE_ENV === 'development',
+  ...userAutocompleteOptions,
+});
 
-  const autocompleteDataset = createAutocompleteDataset({
+const prepareAutocompleteDataset = ({ options, placesInstance }) =>
+  createAutocompleteDataset({
     ...options,
     algoliasearch,
-    onHits: ({ hits, rawAnswer, query }) =>
-      placesInstance.emit('suggestions', {
-        rawAnswer,
-        query,
-        suggestions: hits,
-      }),
-    onError: e => placesInstance.emit('error', e),
-    onRateLimitReached: () => {
-      const listeners = placesInstance.listenerCount('limit');
-      if (listeners === 0) {
-        console.log(errors.rateLimitReached); // eslint-disable-line
-        return;
-      }
-
-      placesInstance.emit('limit', { message: errors.rateLimitReached });
-    },
+    onHits: placesInstance.onHits,
+    onError: placesInstance.onError,
+    onRateLimitReached: placesInstance.onRateLimitReached,
     container: undefined,
   });
 
-  const autocompleteInstance = autocomplete(
+const createAutocompleteInstance = ({
+  container,
+  style,
+  prefix,
+  userAutocompleteOptions,
+  options,
+  placesInstance,
+}) => {
+  const autocompleteOptions = prepareAutocompleteOptions({
+    style,
+    prefix,
+    userAutocompleteOptions,
+  });
+
+  const autocompleteDataset = prepareAutocompleteDataset({
+    options,
+    placesInstance,
+  });
+
+  return autocomplete(container, autocompleteOptions, autocompleteDataset);
+};
+
+export default function places(options) {
+  const normalizedOptions = normalizeOptions(options);
+  const {
     container,
-    autocompleteOptions,
-    autocompleteDataset
-  );
-  const autocompleteContainer = container.parentNode;
+    style,
+    autocompleteOptions: userAutocompleteOptions = {},
+  } = normalizedOptions;
 
-  const autocompleteChangeEvents = ['selected', 'autocompleted'];
+  const prefix = `ap${style === false ? '-nostyle' : ''}`;
 
-  autocompleteChangeEvents.forEach(eventName => {
-    autocompleteInstance.on(`autocomplete:${eventName}`, (_, suggestion) => {
-      placesInstance.emit('change', {
-        rawAnswer: suggestion.rawAnswer,
-        query: suggestion.query,
-        suggestion,
-        suggestionIndex: suggestion.hitIndex,
-      });
-    });
-  });
-  autocompleteInstance.on('autocomplete:cursorchanged', (_, suggestion) => {
-    placesInstance.emit('cursorchanged', {
-      rawAnswer: suggestion.rawAnswer,
-      query: suggestion.query,
-      suggestion,
-      suggestionIndex: suggestion.hitIndex,
-    });
+  const placesInstance = new PlacesProxyEventEmitter();
+  const autocompleteInstance = createAutocompleteInstance({
+    container,
+    style,
+    prefix,
+    userAutocompleteOptions,
+    options,
+    placesInstance,
   });
 
-  const clear = document.createElement('button');
-  clear.setAttribute('type', 'button');
-  clear.classList.add(`${prefix}-input-icon`);
-  clear.classList.add(`${prefix}-icon-clear`);
-  clear.innerHTML = clearIcon;
-  autocompleteContainer.appendChild(clear);
-  clear.style.display = 'none';
+  placesInstance.bindToAutocompleteInstance(autocompleteInstance);
 
-  const pin = document.createElement('button');
-  pin.setAttribute('type', 'button');
-  pin.classList.add(`${prefix}-input-icon`);
-  pin.classList.add(`${prefix}-icon-pin`);
-  pin.innerHTML = pinIcon;
-  autocompleteContainer.appendChild(pin);
-
-  pin.addEventListener('click', () => autocompleteInstance.focus());
-  clear.addEventListener('click', () => {
-    autocompleteInstance.autocomplete.setVal('');
-    autocompleteInstance.focus();
-    clear.style.display = 'none';
-    pin.style.display = '';
-    placesInstance.emit('clear');
+  createSearchBar({
+    container,
+    prefix,
+    autocompleteInstance,
+    placesInstance,
   });
-
-  let previousQuery = '';
-
-  const inputListener = () => {
-    const query = autocompleteInstance.val();
-    if (query === '') {
-      pin.style.display = '';
-      clear.style.display = 'none';
-      if (previousQuery !== query) {
-        placesInstance.emit('clear');
-      }
-    } else {
-      clear.style.display = '';
-      pin.style.display = 'none';
-    }
-    previousQuery = query;
-  };
-
-  autocompleteContainer
-    .querySelector(`.${prefix}-input`)
-    .addEventListener('input', inputListener);
-
-  const autocompleteMethods = ['open', 'close', 'getVal', 'setVal', 'destroy'];
-  autocompleteMethods.forEach(methodName => {
-    placesInstance[methodName] = (...args) => {
-      if (methodName === 'destroy') {
-        // this is the only event we need to manually remove because the input will still be here
-        autocompleteContainer
-          .querySelector(`.${prefix}-input`)
-          .removeEventListener('input', inputListener);
-      }
-
-      autocompleteInstance.autocomplete[methodName](...args);
-    };
-  });
-
-  placesInstance.autocomplete = autocompleteInstance;
 
   return placesInstance;
 }

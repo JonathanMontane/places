@@ -1,7 +1,7 @@
 import value from './formatInputValue.js';
 import suggestion from './formatDropdownValue.js';
-import algoliaLogo from './icons/algolia.svg';
-import osmLogo from './icons/osm.svg';
+import algoliaLogo from '../icons/algolia.svg';
+import osmLogo from '../icons/osm.svg';
 
 export default {
   footer: `<div class="ap-footer">

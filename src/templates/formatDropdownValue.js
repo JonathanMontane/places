@@ -1,10 +1,10 @@
-import addressIcon from './icons/address.svg';
-import cityIcon from './icons/city.svg';
-import countryIcon from './icons/country.svg';
-import busIcon from './icons/bus.svg';
-import trainIcon from './icons/train.svg';
-import townhallIcon from './icons/townhall.svg';
-import planeIcon from './icons/plane.svg';
+import addressIcon from '../icons/address.svg';
+import cityIcon from '../icons/city.svg';
+import countryIcon from '../icons/country.svg';
+import busIcon from '../icons/bus.svg';
+import trainIcon from '../icons/train.svg';
+import townhallIcon from '../icons/townhall.svg';
+import planeIcon from '../icons/plane.svg';
 
 const icons = {
   address: addressIcon,

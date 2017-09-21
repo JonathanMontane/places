@@ -1,4 +1,4 @@
-import formatHit from './formatHit.js';
+import formatHit from './templates/formatHit.js';
 import version from './version.js';
 
 export default function createAutocompleteSource({

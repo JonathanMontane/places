@@ -1,5 +1,5 @@
 import formatDropdownValue from './formatDropdownValue.js';
-jest.mock('./icons/address.svg', () => 'address');
+jest.mock('../icons/address.svg', () => 'address');
 
 describe('formatDropdownValue', () => {
   it('formats the address', () => {
