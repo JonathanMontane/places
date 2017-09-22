@@ -2,6 +2,10 @@
 - no .nvmrc
 - the `placesInstance.destroy` is the only method related to placesInstance that handles DOM code.
 There's maybe a better way to handle the DOM in a `destroy` event.
+- Doesn't handles known acronyms for places (e.g. IDF for Ile de France)
+- Unknown acronyms destroy search results (e.g. `88 rue de rivoli, Paris, IDF, France` is worse than `88 rue de ri`)
+- For France, doesn't handle old region names
+- Postal codes for districts are not mapped correctly 
 
 ## Suggestions
 - use `console.error` instead of `console.log` in
